@@ -1,17 +1,22 @@
 <?php
 
 
+######################################     PHPUNIT  TESTFILE        #################################### 
+
+
 #Test.php FILE #PHPUNIT TEST
-class Test extends TestCase
+class ProvidersTest extends TestCase
 {
     #tested
-    public function testProfileProviderAlbumCommentAdd()
+    public function testProviderAlbumCommentAdd()
     {
         $album = DB::table('providers_albums')->inRandomOrder()->first();
         
         $profile = $this->getProfileByUser();
         $user = $this->getUserByTable($profile->uid);
-
+        
+        
+        //URL to be passed down
         $url = $this->dpath('/profiles/{profile_uid}/providers/{provider_uid}/albums/{album_uid}/comments', [
             'profile_uid' => $profile->uid,
             'provider_uid' => $album->provider_uid,
@@ -21,6 +26,8 @@ class Test extends TestCase
         if ($this->withParams !== 'true') {
             $parameters = [];
         }
+
+        //Parameters to be passed 
         $parameters = [
                 'author_uid' => $profile->uid,
                 'content' => 'test comment add',
@@ -28,7 +35,6 @@ class Test extends TestCase
 
         $this->post($url, $parameters, $this->headers($user))
         ->seeStatusCode(200)
-        // ->dump()
         ->seeJsonStructure([
             'data' => [
                 "uid",
@@ -38,8 +44,53 @@ class Test extends TestCase
                 "content",
             ]
         ]);
+        // ->dump()
     }
+
+    #add provider's aff click
+    public function testProvidersAffiliateClickAdd()
+    {
+        //Selecting one random affiliates table
+        $aff = DB::table('affiliates_stats_orders')->inRandomOrder()->first();
+
+        //Selecting Profile based on table
+        $profile = DB::table('profiles')->where('uid', $aff->profile_uid)->first();
+        $user = $this->getUserByTable($profile);
+        
+        //URL to be passed down
+        $url = $this->dpath(
+            '/profiles/{profile_uid}/providers/affiliates/{aff_uid}/clicks',
+            [   
+                'profile_uid' => $profile->uid,
+                'aff_uid'     => $aff->uid
+            ]
+        );
+
+        //Parameters to be passed 
+        $parameters = [
+            'aff_uid'   => UID::generateUid()
+        ];
+
+        //POST Method
+        $this->post($url, $parameters, $this->headers($user))
+            ->seeStatusCode(200)
+            ->seeJsonStructure([
+                'data' => [
+                    'profile_uid',
+                    'stats_d',
+                    'total',
+                    'created_at',
+                    'updated_at',
+                ],
+            ]);
+            // ->dump()
+    }
+
 }
+
+/**
+ * ##################   TestCase.php     #################################################################
+ */
 
 #TestCase.PHP
 
@@ -47,7 +98,6 @@ class TestCase extends Laravel\Lumen\Testing\TestCase
 {
 
     public $withParams = 'true';
-    private $profiles =['Use without using Eloquent for each test'];
 
     /**
      * Creates the application.
@@ -59,7 +109,11 @@ class TestCase extends Laravel\Lumen\Testing\TestCase
         return require __DIR__.'/../bootstrap/app.php';
     }
 
-    #transforms {var} from string into URL
+    /**
+     * Main Methods
+     */
+
+    #transforms {var_uid} from $url into URL
     public function dpath($url, $parameters) 
     {
         $params = [];
@@ -91,18 +145,47 @@ class TestCase extends Laravel\Lumen\Testing\TestCase
         return $headers;
     }
 
+    /**
+     * GET RANDOM ***
+     */
+    
+    
+    ##Random Functions
+    protected function getRandomAuthUser()
+    {
+        $email = DB::table('users')->inRandomOrder()->first();
+        return User::where('email', $email->email)->first();
+    }
+    
+    protected function getRandomProfileUid()
+    {
+        $profile = DB::table('users_profiles')->inRandomOrder()->first();
+        return $profile->uid;
+    }
+
+    protected function getRandomProfile()
+    {
+        return DB::table('users_profiles')->inRandomOrder()->first() ?? null;
+    }
 
     /**
-     * Random user where table has profile_uid
-     * @param uid $profile
-     * @param uid $profile->uid
+     * GET SPECIFICS
+     */
+
+
+    /**
+     * User that belongs to $table
+     * 
+     * @param profile_attributes_table|uid_from_table
+     * @param null returns a Random User
+     * @example $uid is passed as the table which contains a profile_uid or user_uid field
      * @return User
      */
     protected function getUserByTable($uid = null)
     {
         //$uid is not passed, 0, FALSE, NULL or ''
         if(empty($uid)){
-            return User::inRandomOrder()->first();
+            return $this->getRandomAuthUser();
         }
 
         //$uid is passed as $profile
@@ -110,17 +193,21 @@ class TestCase extends Laravel\Lumen\Testing\TestCase
             return User::where('uid', $uid->user_uid)->first();
         };
 
-        //$uid is passed as main object ex. $cart WHERE EXISTS cart.profile_uid
+        //$uid is passed as main table ex. $cart WHERE EXISTS table.profile_uid
         if(isset($uid->profile_uid)){
+            
             $profile = UserProfile::where('uid', $uid->profile_uid)->first();        
             return User::where('uid', $profile->user_uid)->first();
         };
-
-        //$uis is passed as a string representing profile->uid 
-        $profile = UserProfile::where('uid', $uid)->first();
-        return User::where('uid', $profile->user_uid)->first();
+        
+        //$uid is passed as a string representing profile->uid 
+        
+        return User::where('uid', function ($query) use ($uid){
+                $query->select('user_uid')
+                      ->from('users_profiles')
+                      ->where('uid', $uid);
+                })->orWhere('uid', $uid)->first();
     }
-
 
 
 
@@ -145,85 +232,247 @@ class TestCase extends Laravel\Lumen\Testing\TestCase
     }
     
 
-    #Others
+
     /**
-     * Dump Func shows JSON response
-     * 
+     *   Dump Method
+     * --debug
      *  
      * @param string Output function can be print_r, var_dump or var_export
      * @param boolean $json_decode 
      */
-    protected function dump($json_decode = 1, $other = null)
+    public function dump($json_decode = 1, $other = null)
     {
-
         $content = $this->response->getContent();
-        $seperator = '===============================================================================';
+        $seperator = '=============================================================';
 
-        //What info would you like to receive?
-        $info = [  
+        //info receive array
+        $info = [
 
             'uid',
             'user_uid',
             
                ];
 
-        //skip // not done yet //todo #shows bearer token and other info
+        //todo
         if ($json_decode === 'headers') {
             
+            #TODO HEADERS
             $profile = $this->getProfileByUser();
-            $user = $this->getUserByProfile($profile);                   
+            $user = $this->getUserByProfile($profile);
+            //TODO Dump headers-bearer token and any other info
+            
 
             foreach ($profile as $key => $value) {
                 if (in_array($key, $info)) {
-                $new[$key] = $value;
+                    $new[$key] = $value;
                 }
-            }            
-            
+            }
             var_export($info);
+
             var_export($this->headers($other));
-
         } else {
-
-            #normal dump
+            
             if (isset($json_decode)) {
                 $content = json_decode($content, true);
             }
+            
+            
 
+            #TODO: REMOVE AND USE SWITCH //if value => 0
             if (!empty($json_decode)) {
                 echo PHP_EOL . $seperator . "\n" . PHP_EOL;
                 var_export($content);
                 echo "\n" . $seperator . PHP_EOL;
-            } 
-
-            #sends only code and content/message
-            else {
-                echo PHP_EOL . $seperator . "\n" . PHP_EOL;
-                var_export([$content['status_code'] ?? 'empty' => $content['error']  ?? $content['message'] ?? 'everthing is fine or no message']);
-                echo "\n" . $seperator . PHP_EOL;
+            } else {
+                echo PHP_EOL . $seperator . PHP_EOL;
+                echo $content['status_code'].' >>> '.$content['error']['message']; # ?? $content['status_code']['message'] ?? "everthing is fine or no message";
+                echo PHP_EOL . $seperator . PHP_EOL;
             }
+            return $this;
         }
-        return $this;
-
-    }
-
-
-    
-    ##Random Functions
-    protected function getRandomAuthUser()
-    {
-        $email = DB::table('users')->inRandomOrder()->first();
-        return User::where('email', $email->email)->first();
     }
     
-    protected function getRandomProfileUid()
+
+    #get Random Things Function ###TODO more options
+
+
+    protected function getRand($opt = null){
+        
+        return $this->randomEmail($opt);
+    }
+    #Random Email #Other Stuff
+    protected function randomEmail($opt = null)
     {
-        $profile = DB::table('users_profiles')->inRandomOrder()->first();
-        return $profile->uid;
+
+        $host = [
+            'gmail',
+            'yahoo',
+            'rds',
+            'digiromania',
+            'hotmail',
+            'live',
+            'outlook',
+            'media',
+            'samsung',
+            'tester',
+            'gooogleee',
+            'bestbuy',
+            'locopoco'
+        ];
+        // $name = $this->randomName();
+        $code = [
+            'ro', 'it', 'com', 'lk', 'de', 'fr', 'au', 'us', 'gov'
+        ];
+        
+        switch ($opt) {
+            case 'host':
+                $value= $host[rand(0, count($host) - 1)];
+                break;
+            case 'name':
+                $value= $this->randomName();
+                break;
+            case 'fname':
+                $value= $this->randomName('first');
+                break;
+            case 'lname':
+                $value= $this->randomName('last');
+                break;
+            case 'code':
+                $value= $host[rand(0, count($host) - 1)];
+                break;
+            default:
+                $email = $this->randomName();
+                $email .= "@";
+                $email .= $host[rand(0, count($host) - 1)];
+                $email .= ".";
+                $email .= $code[rand(0, count($code) - 1)];
+                break;
+        }    
+
+        return $value;
     }
 
-    protected function getRandomProfile()
-    {
-        return DB::table('users_profiles')->inRandomOrder()->first() ?? null;
+
+    #Random Name
+    protected function randomName($opt = null) {
+        $firstname = array(
+            'Johnathon',
+            'Anthony',
+            'Erasmo',
+            'Raleigh',
+            'Nancie',
+            'Tama',
+            'Camellia',
+            'Augustine',
+            'Christeen',
+            'Luz',
+            'Diego',
+            'Lyndia',
+            'Thomas',
+            'Georgianna',
+            'Leigha',
+            'Alejandro',
+            'Marquis',
+            'Joan',
+            'Stephania',
+            'Elroy',
+            'Zonia',
+            'Buffy',
+            'Sharie',
+            'Blythe',
+            'Gaylene',
+            'Elida',
+            'Randy',
+            'Margarete',
+            'Margarett',
+            'Dion',
+            'Tomi',
+            'Arden',
+            'Clora',
+            'Laine',
+            'Becki',
+            'Margherita',
+            'Bong',
+            'Jeanice',
+            'Qiana',
+            'Lawanda',
+            'Rebecka',
+            'Maribel',
+            'Tami',
+            'Yuri',
+            'Michele',
+            'Rubi',
+            'Larisa',
+            'Lloyd',
+            'Tyisha',
+            'Samatha',
+        );
+    
+        $lastname = array(
+            'Mischke',
+            'Serna',
+            'Pingree',
+            'Mcnaught',
+            'Pepper',
+            'Schildgen',
+            'Mongold',
+            'Wrona',
+            'Geddes',
+            'Lanz',
+            'Fetzer',
+            'Schroeder',
+            'Block',
+            'Mayoral',
+            'Fleishman',
+            'Roberie',
+            'Latson',
+            'Lupo',
+            'Motsinger',
+            'Drews',
+            'Coby',
+            'Redner',
+            'Culton',
+            'Howe',
+            'Stoval',
+            'Michaud',
+            'Mote',
+            'Menjivar',
+            'Wiers',
+            'Paris',
+            'Grisby',
+            'Noren',
+            'Damron',
+            'Kazmierczak',
+            'Haslett',
+            'Guillemette',
+            'Buresh',
+            'Center',
+            'Kucera',
+            'Catt',
+            'Badon',
+            'Grumbles',
+            'Antes',
+            'Byron',
+            'Volkman',
+            'Klemp',
+            'Pekar',
+            'Pecora',
+            'Schewe',
+            'Ramage',
+        );
+
+        if ($opt === 'first') {
+            return $firstname[rand ( 0 , count($firstname) -1)];
+        }
+        if ($opt === 'last') {
+            return $lastname[rand ( 0 , count($lastname) -1)];
+        }
+
+        $name = $firstname[rand ( 0 , count($firstname) -1)];
+        $name .= ' ';
+        $name .= $lastname[rand ( 0 , count($lastname) -1)];
+    
+        return $name;
     }
 
 
