@@ -1,11 +1,11 @@
 <?php
-namespace App\Http\Controllers\Dome\Provider;
+namespace App\Http\Controllers\Dome\Provider; //ExampleController
 
 use App\Http\Controllers\Controller;
 use App\Models\Dome\Pet\Pet;
 use App\Models\Dome\Provider\Providers;
 use App\Repositories\Dome\Pets\PetSocialRepository;
-use App\Repositories\Dome\Provider\ProviderSocialRepository;
+use App\Repositories\Dome\Provider\ProviderSocialRepository; //PS-ExampleRepository.php
 use App\Repositories\Dome\Stream\StreamNotificationRepository;
 use Illuminate\Http\Request;
 
